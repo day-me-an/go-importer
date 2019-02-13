@@ -2,9 +2,11 @@ package importer
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"errors"
 	"io"
+	"strings"
 )
 
 func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) error {
@@ -30,4 +32,32 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 	}
 
 	return nil
+}
+
+type Advertiser struct {
+	Name string
+}
+
+func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
+	scanner := bufio.NewScanner(r)
+	scanner.Split(cslSplitter)
+
+	for scanner.Scan() {
+		name := scanner.Text()
+		name = strings.Trim(name, " ")
+		name = strings.Replace(name, "\"", "", -1)
+
+		if len(name) > 0 {
+			output <- Advertiser{Name: name}
+		}
+	}
+}
+
+func cslSplitter(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i := 0; i < len(data); i++ {
+		if data[i] == ',' {
+			return i + 1, data[:i], nil
+		}
+	}
+	return 0, data, bufio.ErrFinalToken
 }

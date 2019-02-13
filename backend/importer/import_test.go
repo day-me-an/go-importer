@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +41,60 @@ func TestDecompressArchive(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Decompressing archive failed due to %s", err.Error())
+	}
+}
+
+func TestExtractAds_Empty(t *testing.T) {
+	extractAdvertisersHelper(t, "", []Advertiser{})
+}
+
+func TestExtractAds_Single(t *testing.T) {
+	extractAdvertisersHelper(t, "nike", []Advertiser{{Name: "nike"}})
+}
+
+func TestExtractAds_TrailingComma(t *testing.T) {
+	extractAdvertisersHelper(t, "nike,", []Advertiser{{Name: "nike"}})
+}
+
+func TestExtractAds_Quoted(t *testing.T) {
+	extractAdvertisersHelper(t, "\"nike\"", []Advertiser{{Name: "nike"}})
+}
+
+func TestExtractAds_Multiple(t *testing.T) {
+	extractAdvertisersHelper(t, "nike,apple", []Advertiser{
+		{Name: "nike"},
+		{Name: "apple"},
+	})
+}
+
+func TestExtractAds_MultipleSpaced(t *testing.T) {
+	extractAdvertisersHelper(t, " nike, apple ,google, ", []Advertiser{
+		{Name: "nike"},
+		{Name: "apple"},
+		{Name: "google"},
+	})
+}
+
+func extractAdvertisersHelper(t *testing.T, content string, expected []Advertiser) {
+	output := make(chan Advertiser)
+	defer close(output)
+
+	r := strings.NewReader(content)
+	go ExtractAdvertisers(r, output)
+
+	for i := 0; i < len(expected); i++ {
+		// TODO: handle nothing being there with some kind of timeout.
+		found := <-output
+
+		if found != expected[i] {
+			t.Errorf("Expected %s but found %s at %d", expected[i], found, i)
+		}
+	}
+
+	select {
+	case extra := <-output:
+		t.Errorf("It's returning extra data: %s", extra)
+	default:
+		// Noop because it's as expected.
 	}
 }
