@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"encoding/csv"
 	"errors"
 	"io"
 	"strings"
@@ -38,6 +39,12 @@ type Advertiser struct {
 	Name string
 }
 
+type Product struct {
+	Sku        string
+	Name       string
+	Advertiser string
+}
+
 func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(cslSplitter)
@@ -60,4 +67,29 @@ func cslSplitter(data []byte, atEOF bool) (advance int, token []byte, err error)
 		}
 	}
 	return 0, data, bufio.ErrFinalToken
+}
+
+func ExtractProducts(r io.Reader, output chan Product) error {
+	csvReader := csv.NewReader(r)
+
+	// Skip the header.
+	csvReader.Read()
+
+	for {
+		record, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return errors.New("Faild to read from csv")
+		}
+
+		output <- Product{
+			Name:       record[0],
+			Sku:        record[1],
+			Advertiser: record[2],
+		}
+	}
+
+	return nil
 }
