@@ -121,6 +121,11 @@ func TestExtractProducts_Multiple(t *testing.T) {
 	})
 }
 
+func TestExtractProducts_WrongNumberOfFields(t *testing.T) {
+	// It should just skip these records.
+	extractProductsHelper(t, "name,sku,advertiser\niphone,123,google,EXTRA_DATA", []Product{})
+}
+
 /*
 Unfortunately, Go lacks generics, so some code will have to be duplicated to maintain static typing.
 Empty interfaces were a possibility, but the resulting code seemed overcomplicated due to slices.
@@ -141,14 +146,14 @@ func extractProductsHelper(t *testing.T, content string, expected []Product) {
 		i := 0
 		for found := range output {
 			if i < len(expected) {
-		if found != expected[i] {
-			t.Errorf("Expected %s but found %s at %d", expected[i], found, i)
-		}
+				if found != expected[i] {
+					t.Errorf("Expected %s but found %s at %d", expected[i], found, i)
+				}
 			} else {
 				t.Errorf("It's returning extra data: %s", found)
-	}
+			}
 			i++
-	}
+		}
 	}()
 
 	r := strings.NewReader(content)

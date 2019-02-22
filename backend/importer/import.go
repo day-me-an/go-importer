@@ -6,9 +6,84 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
+
+const ProductConsumersNum = 4
+
+type Advertiser struct {
+	Name string
+}
+
+type Product struct {
+	Sku        string
+	Name       string
+	Advertiser string
+}
+
+// Imports the records contained in the compressed archive file on-the-fly while it's being read without fully downloading it first.
+func ImportOTF(url string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	DecompressArchive(resp.Body, func(filename string, r io.Reader) {
+		fmt.Printf("Processing %s\n", filename)
+
+		var wg sync.WaitGroup
+		var total uint64
+
+		switch filename {
+		case "advertisers.txt":
+			queue := make(chan Advertiser)
+			// Just start _one_ consumer for processing the advertisers since it's so small.
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				for item := range queue {
+					fmt.Println("got an advertiser to process!", item)
+					atomic.AddUint64(&total, 1)
+				}
+			}()
+			ExtractAdvertisers(r, queue)
+			close(queue)
+			wg.Wait()
+
+		case "products.csv":
+			queue := make(chan Product)
+			// Start multiple consumers to process them in parallel.
+			wg.Add(ProductConsumersNum)
+			for i := 0; i < ProductConsumersNum; i++ {
+				go func(num int) {
+					defer wg.Done()
+
+					for item := range queue {
+						fmt.Printf("#%d got a product to process! %s\n", num, item)
+						atomic.AddUint64(&total, 1)
+					}
+				}(i)
+			}
+			err := ExtractProducts(r, queue)
+			close(queue)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		wg.Wait()
+		fmt.Printf("Processed %d records in %s\n", total, filename)
+	})
+
+	return nil
+}
 
 func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) error {
 	decompressed, err := gzip.NewReader(r)
@@ -33,16 +108,6 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 	}
 
 	return nil
-}
-
-type Advertiser struct {
-	Name string
-}
-
-type Product struct {
-	Sku        string
-	Name       string
-	Advertiser string
 }
 
 func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
@@ -80,8 +145,12 @@ func ExtractProducts(r io.Reader, output chan Product) error {
 		if err == io.EOF {
 			break
 		}
+		// Just skip invalid records.
+		if parseErr, ok := err.(*csv.ParseError); ok && parseErr.Err == csv.ErrFieldCount {
+			continue
+		}
 		if err != nil {
-			return errors.New("Faild to read from csv")
+			return err
 		}
 
 		output <- Product{
