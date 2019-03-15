@@ -27,7 +27,7 @@ type Product struct {
 }
 
 // Imports the records contained in the compressed archive file on-the-fly while it's being read without fully downloading it first.
-func ImportOTF(url string) error {
+func ImportOTF(url string, persister Persister) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func ImportOTF(url string) error {
 		fmt.Printf("Processing %s\n", filename)
 
 		var wg sync.WaitGroup
-		var total uint64
+		var total, skipped, failed uint64
 
 		switch filename {
 		case "advertisers.txt":
@@ -49,7 +49,7 @@ func ImportOTF(url string) error {
 				defer wg.Done()
 
 				for item := range queue {
-					fmt.Println("got an advertiser to process!", item)
+					persister.SaveAdvertiser(item)
 					atomic.AddUint64(&total, 1)
 				}
 			}()
@@ -66,8 +66,19 @@ func ImportOTF(url string) error {
 					defer wg.Done()
 
 					for item := range queue {
-						fmt.Printf("#%d got a product to process! %s\n", num, item)
-						atomic.AddUint64(&total, 1)
+						if err := persister.SaveProduct(item); err == nil {
+							atomic.AddUint64(&total, 1)
+						} else if err == ErrUnknownAdvertiser {
+							atomic.AddUint64(&skipped, 1)
+						} else {
+							fmt.Println("Failed due to", err)
+							atomic.AddUint64(&failed, 1)
+						}
+
+						// Display some indication of progress.
+						if total%10000 == 0 {
+							fmt.Printf("Done %d\n", total)
+						}
 					}
 				}(i)
 			}
@@ -79,7 +90,7 @@ func ImportOTF(url string) error {
 		}
 
 		wg.Wait()
-		fmt.Printf("Processed %d records in %s\n", total, filename)
+		fmt.Printf("Imported %d records, skipped %d and failed on %d in %s\n", total, skipped, failed, filename)
 	})
 
 	return nil
