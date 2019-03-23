@@ -20,6 +20,10 @@ type TxSqlAdvertiserRepository struct {
 	tx *sql.Tx
 }
 
+func NewTxAdvertiserRepository(tx *sql.Tx) AdvertiserRepository {
+	return TxSqlAdvertiserRepository{tx}
+}
+
 func (repo TxSqlAdvertiserRepository) Save(item AdvertiserEntity) {
 	// TODO: add an 'ON CONFLICT' to update it if it already exists.
 	repo.tx.Exec("INSERT INTO advertiser (name) VALUES (?)", item.Name)
