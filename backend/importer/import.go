@@ -128,7 +128,8 @@ func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
 	for scanner.Scan() {
 		name := scanner.Text()
 		name = strings.Trim(name, " ")
-		name = strings.Replace(name, "\"", "", -1)
+		// All values are wrapped in single quotes.
+		name = strings.Trim(name, "'")
 
 		if len(name) > 0 {
 			output <- Advertiser{Name: name}
