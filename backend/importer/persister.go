@@ -31,13 +31,11 @@ func (p PersisterImpl) SaveProduct(product Product) error {
 		return ErrUnknownAdvertiser
 	}
 
-	p.productRepo.Save(data.ProductEntity{
+	return p.productRepo.Save(data.ProductEntity{
 		Sku:          product.Sku,
 		Name:         product.Name,
 		AdvertiserId: ad.Id,
 	})
-
-	return nil
 }
 
 var ErrUnknownAdvertiser = errors.New("Uknown advertiser")

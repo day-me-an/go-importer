@@ -8,7 +8,7 @@ import (
 )
 
 func TestProduct_Save(t *testing.T) {
-	withTx(func(tx *sql.Tx) {
+	withTxTest(func(tx *sql.Tx) {
 		repo := TxSqlProductRepository{tx: tx}
 		repo.Save(ProductEntity{Sku: "123abc", Name: "iphone", AdvertiserId: 1})
 

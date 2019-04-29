@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"../data"
 )
 
 const ProductConsumersNum = 4
@@ -38,7 +40,7 @@ func ImportOTF(url string, persister Persister) error {
 		fmt.Printf("Processing %s\n", filename)
 
 		var wg sync.WaitGroup
-		var total, skipped, failed uint64
+		var done, imported, skipped, duplicates, failed uint64
 
 		switch filename {
 		case "advertisers.txt":
@@ -50,12 +52,11 @@ func ImportOTF(url string, persister Persister) error {
 
 				for item := range queue {
 					persister.SaveAdvertiser(item)
-					atomic.AddUint64(&total, 1)
+					atomic.AddUint64(&imported, 1)
 				}
 			}()
 			ExtractAdvertisers(r, queue)
 			close(queue)
-			wg.Wait()
 
 		case "products.csv":
 			queue := make(chan Product)
@@ -67,18 +68,21 @@ func ImportOTF(url string, persister Persister) error {
 
 					for item := range queue {
 						if err := persister.SaveProduct(item); err == nil {
-							atomic.AddUint64(&total, 1)
+							atomic.AddUint64(&imported, 1)
 						} else if err == ErrUnknownAdvertiser {
 							atomic.AddUint64(&skipped, 1)
+						} else if err == data.ErrDuplicateProduct {
+							atomic.AddUint64(&duplicates, 1)
 						} else {
 							fmt.Println("Failed due to", err)
 							atomic.AddUint64(&failed, 1)
 						}
 
 						// Display some indication of progress.
-						if total%10000 == 0 {
-							fmt.Printf("Done %d\n", total)
+						if done%10000 == 0 {
+							fmt.Printf("Done %d\n", done)
 						}
+						atomic.AddUint64(&done, 1)
 					}
 				}(i)
 			}
@@ -90,7 +94,7 @@ func ImportOTF(url string, persister Persister) error {
 		}
 
 		wg.Wait()
-		fmt.Printf("Imported %d records, skipped %d and failed on %d in %s\n", total, skipped, failed, filename)
+		fmt.Printf("Imported %d records, skipped %d, %d duplicates and failed on %d in %s\n", imported, skipped, duplicates, failed, filename)
 	})
 
 	return nil
