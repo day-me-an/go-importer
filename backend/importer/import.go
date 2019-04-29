@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"compress/gzip"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,7 +102,7 @@ func ImportOTF(url string, persister Persister) error {
 func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) error {
 	decompressed, err := gzip.NewReader(r)
 	if err != nil {
-		return errors.New("Couldn't create gzip reader")
+		return err
 	}
 
 	tarReader := tar.NewReader(decompressed)
@@ -113,7 +112,7 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 			break
 		}
 		if err != nil {
-			return errors.New("Couldn't read next tar archive entry")
+			return err
 		}
 
 		// We only care about files.
