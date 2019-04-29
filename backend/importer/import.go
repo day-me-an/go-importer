@@ -124,7 +124,7 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 	return nil
 }
 
-func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
+func ExtractAdvertisers(r io.Reader, output chan<- Advertiser) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(cslSplitter)
 
@@ -149,7 +149,7 @@ func cslSplitter(data []byte, atEOF bool) (advance int, token []byte, err error)
 	return 0, data, bufio.ErrFinalToken
 }
 
-func ExtractProducts(r io.Reader, output chan Product) error {
+func ExtractProducts(r io.Reader, output chan<- Product) error {
 	csvReader := csv.NewReader(r)
 
 	// Skip the header.
