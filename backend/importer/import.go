@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"compress/gzip"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +40,7 @@ func ImportOTF(url string, persister Persister) error {
 
 		var wg sync.WaitGroup
 		var done, imported, skipped, duplicates, failed uint64
+		var doneMutex sync.Mutex
 
 		switch filename {
 		case "advertisers.txt":
@@ -63,7 +63,7 @@ func ImportOTF(url string, persister Persister) error {
 			// Start multiple consumers to process them in parallel.
 			wg.Add(ProductConsumersNum)
 			for i := 0; i < ProductConsumersNum; i++ {
-				go func(num int) {
+				go func() {
 					defer wg.Done()
 
 					for item := range queue {
@@ -79,12 +79,15 @@ func ImportOTF(url string, persister Persister) error {
 						}
 
 						// Display some indication of progress.
+						doneMutex.Lock()
 						if done%10000 == 0 {
 							fmt.Printf("Done %d\n", done)
 						}
+						doneMutex.Unlock()
+
 						atomic.AddUint64(&done, 1)
 					}
-				}(i)
+				}()
 			}
 			err := ExtractProducts(r, queue)
 			close(queue)
@@ -103,7 +106,7 @@ func ImportOTF(url string, persister Persister) error {
 func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) error {
 	decompressed, err := gzip.NewReader(r)
 	if err != nil {
-		return errors.New("Couldn't create gzip reader")
+		return err
 	}
 
 	tarReader := tar.NewReader(decompressed)
@@ -113,7 +116,7 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 			break
 		}
 		if err != nil {
-			return errors.New("Couldn't read next tar archive entry")
+			return err
 		}
 
 		// We only care about files.
@@ -125,7 +128,7 @@ func DecompressArchive(r io.Reader, onFile func(filename string, r io.Reader)) e
 	return nil
 }
 
-func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
+func ExtractAdvertisers(r io.Reader, output chan<- Advertiser) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(cslSplitter)
 
@@ -150,7 +153,7 @@ func cslSplitter(data []byte, atEOF bool) (advance int, token []byte, err error)
 	return 0, data, bufio.ErrFinalToken
 }
 
-func ExtractProducts(r io.Reader, output chan Product) error {
+func ExtractProducts(r io.Reader, output chan<- Product) error {
 	csvReader := csv.NewReader(r)
 
 	// Skip the header.

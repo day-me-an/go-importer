@@ -46,76 +46,82 @@ func TestDecompressArchive(t *testing.T) {
 }
 
 func TestExtractAds_Empty(t *testing.T) {
-	extractAdvertisersHelper(t, "", []Advertiser{})
+	assertAdvertisers(t, "", []Advertiser{})
 }
 
 func TestExtractAds_Single(t *testing.T) {
-	extractAdvertisersHelper(t, "nike", []Advertiser{{Name: "nike"}})
+	assertAdvertisers(t, "nike", []Advertiser{{Name: "nike"}})
 }
 
 func TestExtractAds_TrailingComma(t *testing.T) {
-	extractAdvertisersHelper(t, "nike,", []Advertiser{{Name: "nike"}})
+	assertAdvertisers(t, "nike,", []Advertiser{{Name: "nike"}})
 }
 
 func TestExtractAds_Quoted(t *testing.T) {
-	extractAdvertisersHelper(t, "'nike'", []Advertiser{{Name: "nike"}})
+	assertAdvertisers(t, "'nike'", []Advertiser{{Name: "nike"}})
 }
 
 func TestExtractAds_Multiple(t *testing.T) {
-	extractAdvertisersHelper(t, "nike,apple", []Advertiser{
+	assertAdvertisers(t, "nike,apple", []Advertiser{
 		{Name: "nike"},
 		{Name: "apple"},
 	})
 }
 
 func TestExtractAds_MultipleSpaced(t *testing.T) {
-	extractAdvertisersHelper(t, " nike, apple ,google, ", []Advertiser{
+	assertAdvertisers(t, " nike, apple ,google, ", []Advertiser{
 		{Name: "nike"},
 		{Name: "apple"},
 		{Name: "google"},
 	})
 }
 
-func extractAdvertisersHelper(t *testing.T, content string, expected []Advertiser) {
-	output := make(chan Advertiser, len(expected))
-	defer close(output)
+func assertAdvertisers(t *testing.T, content string, expected []Advertiser) {
+	output := make(chan Advertiser)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		// Will terminate when channel is closed.
+		i := 0
+		for found := range output {
+			if i < len(expected) {
+				if found != expected[i] {
+					t.Errorf("Expected %s but found %s at %d", expected[i], found, i)
+				}
+			} else {
+				t.Errorf("It's returning extra data: %s", found)
+			}
+			i++
+		}
+	}()
 
 	r := strings.NewReader(content)
-	go ExtractAdvertisers(r, output)
+	ExtractAdvertisers(r, output)
+	close(output)
 
-	for i := 0; i < len(expected); i++ {
-		// TODO: handle nothing being there with some kind of timeout.
-		found := <-output
-
-		if found != expected[i] {
-			t.Errorf("Expected %s but found %s at %d", expected[i], found, i)
-		}
-	}
-
-	select {
-	case extra := <-output:
-		t.Errorf("It's returning extra data: %s", extra)
-	default:
-		// Noop because it's as expected.
-	}
+	wg.Wait()
 }
 
 func TestExtractProducts_Empty(t *testing.T) {
-	extractProductsHelper(t, "", []Product{})
+	assertProducts(t, "", []Product{})
 }
 
 func TestExtractProducts_HeaderOnly(t *testing.T) {
-	extractProductsHelper(t, "name,sku,advertiser\n", []Product{})
+	assertProducts(t, "name,sku,advertiser\n", []Product{})
 }
 
 func TestExtractProducts_Data(t *testing.T) {
-	extractProductsHelper(t, "name,sku,advertiser\niphone,123,google", []Product{
+	assertProducts(t, "name,sku,advertiser\niphone,123,google", []Product{
 		Product{Name: "iphone", Sku: "123", Advertiser: "google"},
 	})
 }
 
 func TestExtractProducts_Multiple(t *testing.T) {
-	extractProductsHelper(t, "name,sku,advertiser\niphone,123,google\nmacbook,456,facebook", []Product{
+	assertProducts(t, "name,sku,advertiser\niphone,123,google\nmacbook,456,facebook", []Product{
 		Product{Name: "iphone", Sku: "123", Advertiser: "google"},
 		Product{Name: "macbook", Sku: "456", Advertiser: "facebook"},
 	})
@@ -123,7 +129,7 @@ func TestExtractProducts_Multiple(t *testing.T) {
 
 func TestExtractProducts_WrongNumberOfFields(t *testing.T) {
 	// It should just skip these records.
-	extractProductsHelper(t, "name,sku,advertiser\niphone,123,google,EXTRA_DATA", []Product{})
+	assertProducts(t, "name,sku,advertiser\niphone,123,google,EXTRA_DATA", []Product{})
 }
 
 /*
@@ -133,8 +139,8 @@ Reflection was another option, but that would obviously be much worse.
 
 It appears Golang V2 will have generics.
 */
-func extractProductsHelper(t *testing.T, content string, expected []Product) {
-	output := make(chan Product, len(expected))
+func assertProducts(t *testing.T, content string, expected []Product) {
+	output := make(chan Product)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
