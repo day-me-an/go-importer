@@ -77,7 +77,7 @@ func TestExtractAds_MultipleSpaced(t *testing.T) {
 }
 
 func assertAdvertisers(t *testing.T, content string, expected []Advertiser) {
-	output := make(chan Advertiser, len(expected))
+	output := make(chan Advertiser)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -140,7 +140,7 @@ Reflection was another option, but that would obviously be much worse.
 It appears Golang V2 will have generics.
 */
 func assertProducts(t *testing.T, content string, expected []Product) {
-	output := make(chan Product, len(expected))
+	output := make(chan Product)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
