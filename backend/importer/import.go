@@ -62,7 +62,7 @@ func ImportOTF(url string, persister Persister) error {
 			// Start multiple consumers to process them in parallel.
 			wg.Add(ProductConsumersNum)
 			for i := 0; i < ProductConsumersNum; i++ {
-				go func(num int) {
+				go func() {
 					defer wg.Done()
 
 					for item := range queue {
@@ -83,7 +83,7 @@ func ImportOTF(url string, persister Persister) error {
 						}
 						atomic.AddUint64(&done, 1)
 					}
-				}(i)
+				}()
 			}
 			err := ExtractProducts(r, queue)
 			close(queue)
