@@ -58,7 +58,7 @@ func TestExtractAds_TrailingComma(t *testing.T) {
 }
 
 func TestExtractAds_Quoted(t *testing.T) {
-	extractAdvertisersHelper(t, "\"nike\"", []Advertiser{{Name: "nike"}})
+	extractAdvertisersHelper(t, "'nike'", []Advertiser{{Name: "nike"}})
 }
 
 func TestExtractAds_Multiple(t *testing.T) {

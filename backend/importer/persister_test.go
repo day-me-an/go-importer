@@ -36,8 +36,10 @@ func TestSaveProduct_NoAd(t *testing.T) {
 		adRepo: FakeAdRepo{ad: nil},
 
 		productRepo: FakeProdRepo{
-			onSave: func(prod data.ProductEntity) {
+			onSave: func(prod data.ProductEntity) error {
 				t.Error("Should not save")
+
+				return nil
 			},
 		},
 	}
@@ -59,11 +61,13 @@ func TestSaveProduct_SomeAd(t *testing.T) {
 	sut := PersisterImpl{
 		adRepo: FakeAdRepo{ad: &data.AdvertiserEntity{Id: 123, Name: "google"}},
 
-		productRepo: FakeProdRepo{onSave: func(prod data.ProductEntity) {
+		productRepo: FakeProdRepo{onSave: func(prod data.ProductEntity) error {
 			wasSaved = true
 			if prod.Sku != "123" || prod.Name != "iphone" || prod.AdvertiserId != 123 {
 				t.Error("Unexpected entity saved", prod)
 			}
+
+			return nil
 		}},
 	}
 
@@ -81,6 +85,28 @@ func TestSaveProduct_SomeAd(t *testing.T) {
 	}
 }
 
+func TestSaveProduct_Duplicate(t *testing.T) {
+	sut := PersisterImpl{
+		adRepo: FakeAdRepo{ad: &data.AdvertiserEntity{Id: 123, Name: "google"}},
+
+		productRepo: FakeProdRepo{
+			onSave: func(prod data.ProductEntity) error {
+				return data.ErrDuplicateProduct
+			},
+		},
+	}
+
+	err := sut.SaveProduct(Product{
+		Sku:        "123",
+		Name:       "iphone",
+		Advertiser: "google",
+	})
+
+	if err != data.ErrDuplicateProduct {
+		t.Error("Expected duplicate product error, but got", err)
+	}
+}
+
 type FakeAdRepo struct {
 	ad     *data.AdvertiserEntity
 	onSave func(ad data.AdvertiserEntity)
@@ -95,7 +121,7 @@ func (repo FakeAdRepo) Save(ad data.AdvertiserEntity) {
 }
 
 type FakeProdRepo struct {
-	onSave func(prod data.ProductEntity)
+	onSave func(prod data.ProductEntity) error
 }
 
-func (repo FakeProdRepo) Save(prod data.ProductEntity) { repo.onSave(prod) }
+func (repo FakeProdRepo) Save(prod data.ProductEntity) error { return repo.onSave(prod) }

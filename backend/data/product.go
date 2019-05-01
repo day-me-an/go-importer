@@ -1,6 +1,12 @@
 package data
 
-import "database/sql"
+import (
+	"database/sql"
+	"errors"
+
+	"github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3"
+)
 
 type ProductEntity struct {
 	Sku          string
@@ -9,13 +15,27 @@ type ProductEntity struct {
 }
 
 type ProductRepository interface {
-	Save(ProductEntity)
+	Save(ProductEntity) error
 }
 
 type TxSqlProductRepository struct {
 	tx *sql.Tx
 }
 
-func (repo TxSqlProductRepository) Save(item ProductEntity) {
-	repo.tx.Exec("INSERT INTO product (sku, name, advertiser_id) VALUES (?, ?, ?)", item.Sku, item.Name, item.AdvertiserId)
+func NewTxProductRepository(tx *sql.Tx) ProductRepository {
+	return TxSqlProductRepository{tx}
 }
+
+func (repo TxSqlProductRepository) Save(item ProductEntity) error {
+	_, err := repo.tx.Exec("INSERT INTO product (sku, name, advertiser_id) VALUES (?, ?, ?)", item.Sku, item.Name, item.AdvertiserId)
+
+	if err, ok := err.(sqlite3.Error); ok {
+		if err.Code == sqlite3.ErrConstraint {
+			return ErrDuplicateProduct
+		}
+	}
+
+	return err
+}
+
+var ErrDuplicateProduct = errors.New("Duplicate product")

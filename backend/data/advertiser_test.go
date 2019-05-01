@@ -8,7 +8,7 @@ import (
 )
 
 func TestAdvertiser_GetByName_Empty(t *testing.T) {
-	withTx(func(tx *sql.Tx) {
+	withTxTest(func(tx *sql.Tx) {
 		repo := TxSqlAdvertiserRepository{tx: tx}
 		actual := repo.GetByName("google")
 
@@ -19,7 +19,7 @@ func TestAdvertiser_GetByName_Empty(t *testing.T) {
 }
 
 func TestAdvertiser_GetByName_Some(t *testing.T) {
-	withTx(func(tx *sql.Tx) {
+	withTxTest(func(tx *sql.Tx) {
 		tx.Exec("INSERT INTO advertiser (name) VALUES ('google')")
 
 		repo := TxSqlAdvertiserRepository{tx: tx}
@@ -35,7 +35,7 @@ func TestAdvertiser_GetByName_Some(t *testing.T) {
 }
 
 func TestAdvertiser_Save(t *testing.T) {
-	withTx(func(tx *sql.Tx) {
+	withTxTest(func(tx *sql.Tx) {
 		repo := TxSqlAdvertiserRepository{tx: tx}
 		repo.Save(AdvertiserEntity{Id: -1, Name: "google"})
 
@@ -47,34 +47,4 @@ func TestAdvertiser_Save(t *testing.T) {
 			t.Error("Saved wrong entity", actual)
 		}
 	})
-}
-
-func withTx(action func(tx *sql.Tx)) {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	db.Exec(`
-CREATE TABLE advertiser (
-  id integer PRIMARY KEY AUTOINCREMENT,
-  name text NOT NULL UNIQUE
-);
-
-CREATE TABLE product (
-  sku nvarchar(36) PRIMARY KEY,
-  name text NOT NULL UNIQUE,
-  advertiser_id int NOT NULL,
-
-  FOREIGN KEY (advertiser_id) REFERENCES advertiser (id)
-);
-`)
-
-	tx, err := db.Begin()
-	if err != nil {
-		panic(err)
-	}
-
-	action(tx)
 }

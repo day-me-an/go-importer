@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"../data"
 )
 
 const ProductConsumersNum = 4
@@ -27,7 +29,7 @@ type Product struct {
 }
 
 // Imports the records contained in the compressed archive file on-the-fly while it's being read without fully downloading it first.
-func ImportOTF(url string) error {
+func ImportOTF(url string, persister Persister) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -38,7 +40,7 @@ func ImportOTF(url string) error {
 		fmt.Printf("Processing %s\n", filename)
 
 		var wg sync.WaitGroup
-		var total uint64
+		var done, imported, skipped, duplicates, failed uint64
 
 		switch filename {
 		case "advertisers.txt":
@@ -49,13 +51,12 @@ func ImportOTF(url string) error {
 				defer wg.Done()
 
 				for item := range queue {
-					fmt.Println("got an advertiser to process!", item)
-					atomic.AddUint64(&total, 1)
+					persister.SaveAdvertiser(item)
+					atomic.AddUint64(&imported, 1)
 				}
 			}()
 			ExtractAdvertisers(r, queue)
 			close(queue)
-			wg.Wait()
 
 		case "products.csv":
 			queue := make(chan Product)
@@ -66,8 +67,22 @@ func ImportOTF(url string) error {
 					defer wg.Done()
 
 					for item := range queue {
-						fmt.Printf("#%d got a product to process! %s\n", num, item)
-						atomic.AddUint64(&total, 1)
+						if err := persister.SaveProduct(item); err == nil {
+							atomic.AddUint64(&imported, 1)
+						} else if err == ErrUnknownAdvertiser {
+							atomic.AddUint64(&skipped, 1)
+						} else if err == data.ErrDuplicateProduct {
+							atomic.AddUint64(&duplicates, 1)
+						} else {
+							fmt.Println("Failed due to", err)
+							atomic.AddUint64(&failed, 1)
+						}
+
+						// Display some indication of progress.
+						if done%10000 == 0 {
+							fmt.Printf("Done %d\n", done)
+						}
+						atomic.AddUint64(&done, 1)
 					}
 				}(i)
 			}
@@ -79,7 +94,7 @@ func ImportOTF(url string) error {
 		}
 
 		wg.Wait()
-		fmt.Printf("Processed %d records in %s\n", total, filename)
+		fmt.Printf("Imported %d records, skipped %d, %d duplicates and failed on %d in %s\n", imported, skipped, duplicates, failed, filename)
 	})
 
 	return nil
@@ -117,7 +132,8 @@ func ExtractAdvertisers(r io.Reader, output chan Advertiser) {
 	for scanner.Scan() {
 		name := scanner.Text()
 		name = strings.Trim(name, " ")
-		name = strings.Replace(name, "\"", "", -1)
+		// All values are wrapped in single quotes.
+		name = strings.Trim(name, "'")
 
 		if len(name) > 0 {
 			output <- Advertiser{Name: name}
