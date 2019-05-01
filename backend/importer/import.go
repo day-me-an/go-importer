@@ -40,6 +40,7 @@ func ImportOTF(url string, persister Persister) error {
 
 		var wg sync.WaitGroup
 		var done, imported, skipped, duplicates, failed uint64
+		var doneMutex sync.Mutex
 
 		switch filename {
 		case "advertisers.txt":
@@ -78,9 +79,12 @@ func ImportOTF(url string, persister Persister) error {
 						}
 
 						// Display some indication of progress.
+						doneMutex.Lock()
 						if done%10000 == 0 {
 							fmt.Printf("Done %d\n", done)
 						}
+						doneMutex.Unlock()
+
 						atomic.AddUint64(&done, 1)
 					}
 				}()
